@@ -1,14 +1,7 @@
-
 name: Build RuhZena APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'build-apk.yml'
-      - '.github/workflows/**'
 
 jobs:
   build:
@@ -16,46 +9,48 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
 
-      - name: Extract RuhZena project
+      - name: Extract project
         run: |
-          mkdir extracted
-          unzip -q ruhzena-voice-upgrade.zip -d extracted
-          cp -a extracted/. .
+          mkdir -p extracted
+          unzip -o -q ruhzena-voice-upgrade.zip -d extracted
+          if [ "$(ls -A extracted | wc -l)" -eq 1 ] && [ -d "extracted/$(ls -A extracted)" ]; then
+            cp -af "extracted/$(ls -A extracted)/." .
+          else
+            cp -af extracted/. .
+          fi
+          rm -rf extracted
 
-      - name: Create debug keystore
+      - name: Configure Android SDK
         run: |
-          keytool -genkeypair \
-            -keystore debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Build APK
-        run: gradle :app:assembleDebug --no-daemon
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew :app:assembleDebug --no-daemon
+          else
+            gradle :app:assembleDebug --no-daemon
+          fi
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: RuhZena-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           
